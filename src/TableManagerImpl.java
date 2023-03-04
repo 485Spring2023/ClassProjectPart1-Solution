@@ -3,6 +3,7 @@ import com.apple.foundationdb.Transaction;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 
@@ -24,7 +25,7 @@ public class TableManagerImpl implements TableManager{
                          String[] primaryKeyAttributeNames) {
     // your code
     // First, check if table already exists
-    List<String> tableSubdirectory = new ArrayList<>(DBConf.METADATA_STORE_PATH);
+    List<String> tableSubdirectory = new ArrayList<>();
     tableSubdirectory.add(tableName);
 
     if (FDBHelper.doesSubdirectoryExists(db, tableSubdirectory)) {
@@ -55,8 +56,12 @@ public class TableManagerImpl implements TableManager{
       return StatusCode.TABLE_CREATION_PRIMARY_KEY_NOT_FOUND;
     }
 
+
+
     // persist the creation
     Transaction tx = FDBHelper.openTransaction(db);
+
+    FDBHelper.createOrOpenSubspace(db, Collections.singletonList(tableName));
 
     List<FDBKVPair> pairs = new TableMetadataTransformer(tableName).serialize(tblMetadata);
     FDBHelper.persistFDBKVPairs(db, tx, pairs);
@@ -69,7 +74,7 @@ public class TableManagerImpl implements TableManager{
   public StatusCode deleteTable(String tableName) {
     // your code
     // First, check if table exists
-    List<String> tableSubdirectory = new ArrayList<>(DBConf.METADATA_STORE_PATH);
+    List<String> tableSubdirectory = new ArrayList<>();
     tableSubdirectory.add(tableName);
     if (!FDBHelper.doesSubdirectoryExists(db, tableSubdirectory)) {
       return StatusCode.TABLE_NOT_FOUND;
@@ -85,8 +90,7 @@ public class TableManagerImpl implements TableManager{
   public HashMap<String, TableMetadata> listTables() {
     // your code
     HashMap<String, TableMetadata> res = new HashMap<>();
-    List<String> existingTableNames = FDBHelper.getAllDirectSubspaceName(db,
-        DBConf.METADATA_STORE_PATH);
+    List<String> existingTableNames = FDBHelper.getAllDirectSubspaceName(db);
 
     for (String tblName : existingTableNames) {
       TableMetadataTransformer tblTransformer = new TableMetadataTransformer(tblName);
@@ -102,7 +106,7 @@ public class TableManagerImpl implements TableManager{
   @Override
   public StatusCode addAttribute(String tableName, String attributeName, AttributeType attributeType) {
     // your code
-    List<String> tableSubdirectory = new ArrayList<>(DBConf.METADATA_STORE_PATH);
+    List<String> tableSubdirectory = new ArrayList<>();
     tableSubdirectory.add(tableName);
     if (!FDBHelper.doesSubdirectoryExists(db, tableSubdirectory)) {
       return StatusCode.TABLE_NOT_FOUND;
@@ -130,7 +134,7 @@ public class TableManagerImpl implements TableManager{
   public StatusCode dropAttribute(String tableName, String attributeName) {
     // your code
 
-    List<String> tableSubdirectory = new ArrayList<>(DBConf.METADATA_STORE_PATH);
+    List<String> tableSubdirectory = new ArrayList<>();
     tableSubdirectory.add(tableName);
     if (!FDBHelper.doesSubdirectoryExists(db, tableSubdirectory)) {
       return StatusCode.TABLE_NOT_FOUND;

@@ -173,7 +173,7 @@ public class TableManagerTest {
   public void unitTest6() {
     tableManager.dropAllTables();
 
-    int numberOfTables = 10;
+    int numberOfTables = 1000;
 
     assertEquals(StatusCode.TABLE_NOT_FOUND, tableManager.deleteTable("Employee"));
     HashMap<String, TableMetadata> expectTables = new HashMap<>();
@@ -204,7 +204,7 @@ public class TableManagerTest {
   @Test
   public void unitTest7() {
     tableManager.dropAllTables();
-    int numberOfAttributes = 10;
+    int numberOfAttributes = 1000;
 
     TableMetadata employeeTable = new TableMetadata(EmployeeTableAttributeNames, EmployeeTableAttributeTypes,
         EmployeeTablePKAttributes);

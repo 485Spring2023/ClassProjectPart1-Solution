@@ -52,6 +52,11 @@ public class FDBHelper {
     return subpaths;
   }
 
+  public static List<String> getAllDirectSubspaceName(Database db) {
+    List<String> subpaths = DirectoryLayer.getDefault().list(db).join();
+    return subpaths;
+  }
+
   public static List<FDBKVPair> getAllKeyValuePairsOfSubdirectory(Database db, List<String> path) {
     List<FDBKVPair> res = new ArrayList<>();
     if (!doesSubdirectoryExists(db, path)) {
