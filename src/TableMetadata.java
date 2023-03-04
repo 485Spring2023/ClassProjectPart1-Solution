@@ -21,7 +21,7 @@ public class TableMetadata {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
     TableMetadata table = (TableMetadata) o;
-    return Objects.equals(attributes, table.attributes) && Objects.equals(primaryKeys, table.primaryKeys);
+    return Objects.equals(attributes, table.attributes) && primaryKeys.containsAll(table.getPrimaryKeys()) && table.getPrimaryKeys().containsAll(primaryKeys);
   }
 
   @Override

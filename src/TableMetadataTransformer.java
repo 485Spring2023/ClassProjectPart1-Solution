@@ -26,27 +26,15 @@ public class TableMetadataTransformer {
     return res;
   }
 
-  public static Tuple getTablePrimaryKeyTuple(String tableName) {
-    return new Tuple().add(PRIMARY_KEY_PREFIX).add(tableName);
-  }
-
   public FDBKVPair getAttributeKVPair(String attributeName, AttributeType attributeType) {
     Tuple keyTuple = getTableAttributeKeyTuple(attributeName);
-    Tuple valueTuple = new Tuple().add(attributeType.ordinal());
+    Tuple valueTuple = new Tuple().add(attributeType.ordinal()).add(false);
 
     return new FDBKVPair(tableAttributeStorePath, keyTuple, valueTuple);
   }
 
   public static Tuple getTableAttributeKeyTuple(String attributeName) {
-    return new Tuple().add(ATTRIBUTE_KEY_PREFIX).add(attributeName);
-  }
-
-  public static boolean isKeyTablePrimaryKey(Tuple t) {
-    return !t.isEmpty() && t.getString(0).equals(PRIMARY_KEY_PREFIX);
-  }
-
-  public static boolean isKeyTableAttributeKey(Tuple t) {
-    return !t.isEmpty() && t.getString(0).equals(ATTRIBUTE_KEY_PREFIX);
+    return new Tuple().add(attributeName);
   }
 
   public TableMetadataTransformer(String tableName) {
@@ -73,12 +61,19 @@ public class TableMetadataTransformer {
       Tuple key = kv.getKey();
       Tuple value = kv.getValue();
 
-      if (key.getString(0).equals(ATTRIBUTE_KEY_PREFIX)) {
-        String attrName = key.getString(1);
-        tableMetadata.addAttribute(attrName,
-            AttributeType.values() [Math.toIntExact((Long) value.get(0))]);
-      } else if (key.getString(0).equals(PRIMARY_KEY_PREFIX)) {
-        primaryKeys = getPrimaryKeysFromPrimaryKeyTuple(value);
+//      if (key.getString(0).equals(ATTRIBUTE_KEY_PREFIX)) {
+//        String attrName = key.getString(1);
+//        tableMetadata.addAttribute(attrName,
+//            AttributeType.values() [Math.toIntExact((Long) value.get(0))]);
+//      } else if (key.getString(0).equals(PRIMARY_KEY_PREFIX)) {
+//        primaryKeys = getPrimaryKeysFromPrimaryKeyTuple(value);
+//      }
+
+      String attributeName = key.getString(0);
+      tableMetadata.addAttribute(attributeName, AttributeType.values() [Math.toIntExact((Long) value.get(0))]);
+      boolean isPrimaryKey = value.getBoolean(1);
+      if (isPrimaryKey) {
+        primaryKeys.add(attributeName);
       }
     }
 
@@ -90,20 +85,25 @@ public class TableMetadataTransformer {
     List<FDBKVPair> res = new ArrayList<>();
 
     HashMap<String, AttributeType> attributeMap = table.getAttributes();
+
+    List<String> primaryKeys = table.getPrimaryKeys();
+
     // prepare kv pairs for Attribute
     for (Map.Entry<String, AttributeType> kv : attributeMap.entrySet()) {
-      Tuple keyTuple = getTableAttributeKeyTuple(kv.getKey());
-      Tuple valueTuple = new Tuple().add(kv.getValue().ordinal());
+//      Tuple keyTuple = getTableAttributeKeyTuple(kv.getKey());
+      Tuple keyTuple = new Tuple().add(kv.getKey());
+      boolean isPrimaryKey = primaryKeys.contains(kv.getKey());
+      Tuple valueTuple = new Tuple().add(kv.getValue().ordinal()).add(isPrimaryKey);
 
       res.add(new FDBKVPair(tableAttributeStorePath, keyTuple, valueTuple));
     }
-
-    Tuple tablePrimKey = getTablePrimaryKeyTuple(tableName);
-    Tuple tablePrimValue = new Tuple();
-    for (String pk : table.getPrimaryKeys()) {
-      tablePrimValue = tablePrimValue.add(pk);
-    }
-    res.add(new FDBKVPair(tableAttributeStorePath, tablePrimKey, tablePrimValue));
+//
+//    Tuple tablePrimKey = getTablePrimaryKeyTuple(tableName);
+//    Tuple tablePrimValue = new Tuple();
+//    for (String pk : table.getPrimaryKeys()) {
+//      tablePrimValue = tablePrimValue.add(pk);
+//    }
+//    res.add(new FDBKVPair(tableAttributeStorePath, tablePrimKey, tablePrimValue));
 
     return res;
   }
