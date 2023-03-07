@@ -30,40 +30,25 @@ public class FDBHelper {
     return db;
   }
 
-
-  public static void setFDBKVPair(Database db, Transaction tx, FDBKVPair kv) {
-    DirectorySubspace tgtSubspace = FDBHelper.createOrOpenSubspace(db, kv.getSubspacePath());
+  public static void setFDBKVPair(DirectorySubspace tgtSubspace, Transaction tx, FDBKVPair kv) {
+    if (tgtSubspace == null) {
+      tgtSubspace = FDBHelper.createOrOpenSubspace(tx, kv.getSubspacePath());
+    }
     tx.set(tgtSubspace.pack(kv.getKey()), kv.getValue().pack());
   }
 
-  public static void persistFDBKVPairs(Database db, Transaction tx, List<FDBKVPair> kvPairs) {
-    for (FDBKVPair kv : kvPairs) {
-      setFDBKVPair(db, tx, kv);
-    }
-  }
-
-  public static List<String> getAllDirectSubspaceName(Database db, List<String> path) {
-    if (!doesSubdirectoryExists(db, path)) {
-      return new ArrayList<>();
-    }
-    DirectorySubspace dir = FDBHelper.createOrOpenSubspace(db, path);
-    List<String> subpaths = dir.list(db).join();
-
+  public static List<String> getAllDirectSubspaceName(Transaction tx) {
+    List<String> subpaths = DirectoryLayer.getDefault().list(tx).join();
     return subpaths;
   }
 
-  public static List<String> getAllDirectSubspaceName(Database db) {
-    List<String> subpaths = DirectoryLayer.getDefault().list(db).join();
-    return subpaths;
-  }
-
-  public static List<FDBKVPair> getAllKeyValuePairsOfSubdirectory(Database db, List<String> path) {
+  public static List<FDBKVPair> getAllKeyValuePairsOfSubdirectory(Database db, Transaction tx, List<String> path) {
     List<FDBKVPair> res = new ArrayList<>();
-    if (!doesSubdirectoryExists(db, path)) {
+    if (!doesSubdirectoryExists(tx, path)) {
       return res;
     }
 
-    DirectorySubspace dir = FDBHelper.createOrOpenSubspace(db, path);
+    DirectorySubspace dir = FDBHelper.createOrOpenSubspace(tx, path);
     Range range = dir.range();
 
     Transaction readTx = openTransaction(db);
@@ -79,6 +64,18 @@ public class FDBHelper {
     return res;
   }
 
+  public static FDBKVPair getCertainKeyValuePairInSubdirectory(DirectorySubspace dir, Transaction tx, Tuple keyTuple, List<String> path) {
+    if (dir == null) {
+      return null;
+    }
+    byte[] valBytes = tx.get(dir.pack(keyTuple)).join();
+    if (valBytes == null) {
+      return null;
+    }
+    Tuple value = Tuple.fromBytes(valBytes);
+    return new FDBKVPair(path, keyTuple, value);
+  }
+
   public static void clear(Database db) {
     Transaction tx = openTransaction(db);
     final byte[] st = new Subspace(new byte[]{(byte) 0x00}).getKey();
@@ -87,25 +84,23 @@ public class FDBHelper {
     commitTransaction(tx);
   }
 
-  public static DirectorySubspace createOrOpenSubspace(Database db, List<String> path) {
-    return DirectoryLayer.getDefault().createOrOpen(db, path).join();
+  public static DirectorySubspace createOrOpenSubspace(Transaction tx, List<String> path) {
+    return DirectoryLayer.getDefault().createOrOpen(tx, path).join();
   }
 
-  public static boolean doesSubdirectoryExists(Database db, List<String> path) {
-    return DirectoryLayer.getDefault().exists(db, path).join();
+  public static DirectorySubspace openSubspace(Transaction tx, List<String> path) {
+    return DirectoryLayer.getDefault().open(tx, path).join();
   }
 
-  public static void removeSubspace(Database db, Transaction tx, List<String> path) {
+  public static boolean doesSubdirectoryExists(Transaction tx, List<String> path) {
+    return DirectoryLayer.getDefault().exists(tx, path).join();
+  }
+
+  public static void removeSubspace(Transaction tx, List<String> path) {
     DirectoryLayer.getDefault().remove(tx, path).join();
   }
 
-  public static void removeKeyValuePair(Database db, Transaction tx, List<String> path, Tuple keyTuple) {
-    if (!doesSubdirectoryExists(db, path)) {
-      return;
-    }
-
-    DirectorySubspace dir = FDBHelper.createOrOpenSubspace(db, path);
-
+  public static void removeKeyValuePair(Transaction tx, DirectorySubspace dir, Tuple keyTuple) {
     tx.clear(dir.pack(keyTuple));
   }
 

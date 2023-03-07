@@ -1,5 +1,6 @@
 import com.apple.foundationdb.Database;
 import com.apple.foundationdb.Transaction;
+import com.apple.foundationdb.directory.DirectorySubspace;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -28,10 +29,6 @@ public class TableManagerImpl implements TableManager{
     List<String> tableSubdirectory = new ArrayList<>();
     tableSubdirectory.add(tableName);
 
-    if (FDBHelper.doesSubdirectoryExists(db, tableSubdirectory)) {
-      return StatusCode.TABLE_ALREADY_EXISTS;
-    }
-
     if (attributeNames == null || attributeType == null || primaryKeyAttributeNames == null) {
       return StatusCode.TABLE_CREATION_ATTRIBUTE_INVALID;
     }
@@ -43,6 +40,11 @@ public class TableManagerImpl implements TableManager{
     if (primaryKeyAttributeNames.length == 0) {
       return StatusCode.TABLE_CREATION_NO_PRIMARY_KEY;
     }
+    Transaction tx = FDBHelper.openTransaction(db);
+    if (FDBHelper.doesSubdirectoryExists(tx, tableSubdirectory)) {
+      FDBHelper.abortTransaction(tx);
+      return StatusCode.TABLE_ALREADY_EXISTS;
+    }
 
     TableMetadata tblMetadata = new TableMetadata();
     HashMap<String, AttributeType> attributes = new HashMap<>();
@@ -53,18 +55,18 @@ public class TableManagerImpl implements TableManager{
     tblMetadata.setAttributes(attributes);
     StatusCode isPrimaryKeyAdded = tblMetadata.setPrimaryKeys(Arrays.asList(primaryKeyAttributeNames));
     if (isPrimaryKeyAdded != StatusCode.SUCCESS) {
+      FDBHelper.abortTransaction(tx);
       return StatusCode.TABLE_CREATION_PRIMARY_KEY_NOT_FOUND;
     }
 
-
-
     // persist the creation
-    Transaction tx = FDBHelper.openTransaction(db);
+    TableMetadataTransformer transformer = new TableMetadataTransformer(tableName);
+    DirectorySubspace tableAttrSpace = FDBHelper.createOrOpenSubspace(tx, transformer.getTableAttributeStorePath());
 
-    FDBHelper.createOrOpenSubspace(db, Collections.singletonList(tableName));
-
-    List<FDBKVPair> pairs = new TableMetadataTransformer(tableName).serialize(tblMetadata);
-    FDBHelper.persistFDBKVPairs(db, tx, pairs);
+    List<FDBKVPair> pairs = transformer.serialize(tblMetadata);
+    for (FDBKVPair kvPair : pairs) {
+      FDBHelper.setFDBKVPair(tableAttrSpace, tx, kvPair);
+    }
     FDBHelper.commitTransaction(tx);
 
     return StatusCode.SUCCESS;
@@ -74,14 +76,15 @@ public class TableManagerImpl implements TableManager{
   public StatusCode deleteTable(String tableName) {
     // your code
     // First, check if table exists
+    Transaction tx = FDBHelper.openTransaction(db);
     List<String> tableSubdirectory = new ArrayList<>();
+
     tableSubdirectory.add(tableName);
-    if (!FDBHelper.doesSubdirectoryExists(db, tableSubdirectory)) {
+    if (!FDBHelper.doesSubdirectoryExists(tx, tableSubdirectory)) {
+      FDBHelper.abortTransaction(tx);
       return StatusCode.TABLE_NOT_FOUND;
     }
-
-    Transaction tx = FDBHelper.openTransaction(db);
-    FDBHelper.removeSubspace(db, tx, tableSubdirectory);
+    FDBHelper.removeSubspace(tx, tableSubdirectory);
     FDBHelper.commitTransaction(tx);
     return StatusCode.SUCCESS;
   }
@@ -89,42 +92,45 @@ public class TableManagerImpl implements TableManager{
   @Override
   public HashMap<String, TableMetadata> listTables() {
     // your code
+    Transaction readTx = FDBHelper.openTransaction(db);
     HashMap<String, TableMetadata> res = new HashMap<>();
-    List<String> existingTableNames = FDBHelper.getAllDirectSubspaceName(db);
+    List<String> existingTableNames = FDBHelper.getAllDirectSubspaceName(readTx);
 
     for (String tblName : existingTableNames) {
       TableMetadataTransformer tblTransformer = new TableMetadataTransformer(tblName);
       List<String> tblAttributeDirPath = tblTransformer.getTableAttributeStorePath();
-      List<FDBKVPair> kvPairs = FDBHelper.getAllKeyValuePairsOfSubdirectory(db,
-          tblAttributeDirPath);
+      List<FDBKVPair> kvPairs = FDBHelper.getAllKeyValuePairsOfSubdirectory(db, readTx, tblAttributeDirPath);
       TableMetadata tblMetadata = tblTransformer.deserialize(kvPairs);
       res.put(tblName, tblMetadata);
     }
+
+    FDBHelper.commitTransaction(readTx);
     return res;
   }
 
   @Override
   public StatusCode addAttribute(String tableName, String attributeName, AttributeType attributeType) {
     // your code
-    List<String> tableSubdirectory = new ArrayList<>();
-    tableSubdirectory.add(tableName);
-    if (!FDBHelper.doesSubdirectoryExists(db, tableSubdirectory)) {
+    Transaction tx = FDBHelper.openTransaction(db);
+    // check if the table exists
+    if (!FDBHelper.doesSubdirectoryExists(tx,Collections.singletonList(tableName))) {
+      FDBHelper.abortTransaction(tx);
       return StatusCode.TABLE_NOT_FOUND;
     }
-
     // retrieve attributes of the table, check if attributes exists
     TableMetadataTransformer tblTransformer = new TableMetadataTransformer(tableName);
     List<String> tblAttributeDirPath = tblTransformer.getTableAttributeStorePath();
-    TableMetadata tblMetadata = tblTransformer.deserialize(FDBHelper.getAllKeyValuePairsOfSubdirectory(db, tblAttributeDirPath));
+    DirectorySubspace tableAttrDir = FDBHelper.openSubspace(tx, tblAttributeDirPath);
 
-    HashMap<String, AttributeType> attributes = tblMetadata.getAttributes();
-    if (attributes.containsKey(attributeName)) {
+    // retrieve the target attribute, check if that attribute exists
+    FDBKVPair pair = FDBHelper.getCertainKeyValuePairInSubdirectory(tableAttrDir, tx, TableMetadataTransformer.getTableAttributeKeyTuple(attributeName), tblAttributeDirPath);
+    if (pair != null) {
+      // KVPair exists
+      FDBHelper.abortTransaction(tx);
       return StatusCode.ATTRIBUTE_ALREADY_EXISTS;
     }
 
-    Transaction tx = FDBHelper.openTransaction(db);
-
-    FDBHelper.setFDBKVPair(db, tx, tblTransformer.getAttributeKVPair(attributeName, attributeType));
+    FDBHelper.setFDBKVPair(tableAttrDir, tx, tblTransformer.getAttributeKVPair(attributeName, attributeType));
 
     FDBHelper.commitTransaction(tx);
     return StatusCode.SUCCESS;
@@ -132,27 +138,26 @@ public class TableManagerImpl implements TableManager{
 
   @Override
   public StatusCode dropAttribute(String tableName, String attributeName) {
-    // your code
-
-    List<String> tableSubdirectory = new ArrayList<>();
-    tableSubdirectory.add(tableName);
-    if (!FDBHelper.doesSubdirectoryExists(db, tableSubdirectory)) {
+    Transaction tx = FDBHelper.openTransaction(db);
+    // check if the table exists
+    if (!FDBHelper.doesSubdirectoryExists(tx,Collections.singletonList(tableName))) {
+      FDBHelper.abortTransaction(tx);
       return StatusCode.TABLE_NOT_FOUND;
     }
 
-    // retrieve attributes of the table, check if attributes exists
-    TableMetadataTransformer tblTransformer = new TableMetadataTransformer(tableName);
-    List<String> tblAttributeDirPath = tblTransformer.getTableAttributeStorePath();
-    TableMetadata tblMetadata = tblTransformer.deserialize(FDBHelper.getAllKeyValuePairsOfSubdirectory(db, tblAttributeDirPath));
+    TableMetadataTransformer transformer = new TableMetadataTransformer(tableName);
+    List<String> tblAttributeDirPath = transformer.getTableAttributeStorePath();
+    DirectorySubspace tableAttrDir = FDBHelper.openSubspace(tx, tblAttributeDirPath);
 
-    HashMap<String, AttributeType> attributes = tblMetadata.getAttributes();
-    if (!attributes.containsKey(attributeName)) {
+    // retrieve the target attribute, check if that attribute exists
+    FDBKVPair pair = FDBHelper.getCertainKeyValuePairInSubdirectory(tableAttrDir, tx, TableMetadataTransformer.getTableAttributeKeyTuple(attributeName), tblAttributeDirPath);
+    if (pair == null) {
+      // KVPair not exists
+      FDBHelper.abortTransaction(tx);
       return StatusCode.ATTRIBUTE_NOT_FOUND;
     }
-
-    Transaction tx = FDBHelper.openTransaction(db);
-    FDBHelper.removeKeyValuePair(db, tx, tblAttributeDirPath,
-        TableMetadataTransformer.getTableAttributeKeyTuple(attributeName));
+    // if exists, remove the attribute corresponding kvPair
+    FDBHelper.removeKeyValuePair(tx, tableAttrDir, pair.getKey());
     FDBHelper.commitTransaction(tx);
 
     return StatusCode.SUCCESS;

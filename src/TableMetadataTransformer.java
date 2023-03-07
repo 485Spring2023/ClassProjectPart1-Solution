@@ -58,8 +58,7 @@ public class TableMetadataTransformer {
 
     // prepare kv pairs for Attribute
     for (Map.Entry<String, AttributeType> kv : attributeMap.entrySet()) {
-//      Tuple keyTuple = getTableAttributeKeyTuple(kv.getKey());
-      Tuple keyTuple = new Tuple().add(kv.getKey());
+      Tuple keyTuple = getTableAttributeKeyTuple(kv.getKey());
       boolean isPrimaryKey = primaryKeys.contains(kv.getKey());
       Tuple valueTuple = new Tuple().add(kv.getValue().ordinal()).add(isPrimaryKey);
 
