@@ -83,7 +83,7 @@ public class TableManagerImpl implements TableManager{
       FDBHelper.abortTransaction(tx);
       return StatusCode.TABLE_NOT_FOUND;
     }
-    FDBHelper.removeSubspace(tx, tableSubdirectory);
+    FDBHelper.dropSubspace(tx, tableSubdirectory);
     FDBHelper.commitTransaction(tx);
     return StatusCode.SUCCESS;
   }

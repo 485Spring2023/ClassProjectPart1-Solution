@@ -93,7 +93,7 @@ public class FDBHelper {
     return DirectoryLayer.getDefault().exists(tx, path).join();
   }
 
-  public static void removeSubspace(Transaction tx, List<String> path) {
+  public static void dropSubspace(Transaction tx, List<String> path) {
     DirectoryLayer.getDefault().remove(tx, path).join();
   }
 
