@@ -15,7 +15,6 @@ import java.util.List;
 public class TableManagerImpl implements TableManager{
 
   private Database db;
-  private List<String> tableNames = new ArrayList<>();
 
   public TableManagerImpl() {
     db = FDBHelper.initialization();
