@@ -30,7 +30,7 @@ public class TableMetadataTransformer {
     return tableAttributeStorePath;
   }
 
-  public TableMetadata deserialize(List<FDBKVPair> pairs) {
+  public TableMetadata convertBackToTableMetadata(List<FDBKVPair> pairs) {
     TableMetadata tableMetadata = new TableMetadata();
     List<String> primaryKeys = new ArrayList<>();
     for (FDBKVPair kv : pairs) {
@@ -49,7 +49,7 @@ public class TableMetadataTransformer {
     return tableMetadata;
   }
 
-  public List<FDBKVPair> serialize(TableMetadata table) {
+  public List<FDBKVPair> convertToFDBKVPairs(TableMetadata table) {
     List<FDBKVPair> res = new ArrayList<>();
 
     HashMap<String, AttributeType> attributeMap = table.getAttributes();

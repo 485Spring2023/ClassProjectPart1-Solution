@@ -62,7 +62,7 @@ public class TableManagerImpl implements TableManager{
     TableMetadataTransformer transformer = new TableMetadataTransformer(tableName);
     DirectorySubspace tableAttrSpace = FDBHelper.createOrOpenSubspace(tx, transformer.getTableAttributeStorePath());
 
-    List<FDBKVPair> pairs = transformer.serialize(tblMetadata);
+    List<FDBKVPair> pairs = transformer.convertToFDBKVPairs(tblMetadata);
     for (FDBKVPair kvPair : pairs) {
       FDBHelper.setFDBKVPair(tableAttrSpace, tx, kvPair);
     }
@@ -99,7 +99,7 @@ public class TableManagerImpl implements TableManager{
       TableMetadataTransformer tblTransformer = new TableMetadataTransformer(tblName);
       List<String> tblAttributeDirPath = tblTransformer.getTableAttributeStorePath();
       List<FDBKVPair> kvPairs = FDBHelper.getAllKeyValuePairsOfSubdirectory(db, readTx, tblAttributeDirPath);
-      TableMetadata tblMetadata = tblTransformer.deserialize(kvPairs);
+      TableMetadata tblMetadata = tblTransformer.convertBackToTableMetadata(kvPairs);
       res.put(tblName, tblMetadata);
     }
 
