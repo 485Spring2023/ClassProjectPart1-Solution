@@ -51,16 +51,13 @@ public class FDBHelper {
     DirectorySubspace dir = FDBHelper.createOrOpenSubspace(tx, path);
     Range range = dir.range();
 
-    Transaction readTx = openTransaction(db);
-
-    List<KeyValue> kvs = readTx.getRange(range).asList().join();
+    List<KeyValue> kvs = tx.getRange(range).asList().join();
     for (KeyValue kv : kvs) {
       Tuple key = dir.unpack(kv.getKey());
       Tuple value = Tuple.fromBytes(kv.getValue());
       res.add(new FDBKVPair(path, key, value));
     }
 
-    commitTransaction(readTx);
     return res;
   }
 
